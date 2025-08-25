@@ -17,44 +17,41 @@
 #define BIDIRECTIONAL 0    /* change to 1 if you're doing extra credit */
                            /* and write a routine called B_output */
 
-/* a "msg" is the data unit passed from layer 5 (teachers code) to layer  */
-/* 4 (students' code).  It contains the data (characters) to be delivered */
+/* a "msg" is the data unit passed from layer 5 (teachers code / application layer) to layer  */
+/* 4 (students' code / transport layer).  It contains the data (characters) to be delivered */
 /* to layer 5 via the students transport level protocol entities.         */
 struct msg {
   char data[20];
-  };
+};
 
-/* a packet is the data unit passed from layer 4 (students code) to layer */
-/* 3 (teachers code).  Note the pre-defined packet structure, which all   */
+/* a packet is the data unit passed from layer 4 (students code / tcp layer) to layer */
+/* 3 (teachers code / network layer).  Note the pre-defined packet structure, which all   */
 /* students must follow. */
 struct pkt {
    int seqnum;
    int acknum;
-   int checksum;
-   char payload[20];
-    };
+   int checksum; // check for corrupt packets
+   char payload[20]; // msg
+};
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
 
 
 
-/* called from layer 5, passed the data to be sent to other side */
-A_output(message)
-  struct msg message;
+/* called from layer 5 (application layer), passed the data to be sent to other side */
+void A_output(struct msg message)
 {
 
 }
 
-B_output(message)  /* need be completed only for extra credit */
-  struct msg message;
+void B_output(struct msg message)  /* need be completed only for extra credit */
 {
 
 }
 
 /* called from layer 3, when a packet arrives for layer 4 */
-A_input(packet)
-  struct pkt packet;
+void A_input(struct pkt packet)
 {
 
 }
@@ -65,8 +62,8 @@ A_timerinterrupt()
 
 }  
 
-/* the following routine will be called once (only) before any other */
-/* entity A routines are called. You can use it to do any initialization */
+/* the following routine will be called once (only) before any other entity A routines are called. 
+You can use it to do any initialization */
 A_init()
 {
 }
@@ -74,7 +71,7 @@ A_init()
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
-/* called from layer 3, when a packet arrives for layer 4 at B*/
+/* called from layer 3 (network layer), when a packet arrives for layer 4 at B*/
 B_input(packet)
   struct pkt packet;
 {
@@ -115,13 +112,13 @@ struct event {
    struct pkt *pktptr;     /* ptr to packet (if any) assoc w/ this event */
    struct event *prev;
    struct event *next;
- };
+};
 struct event *evlist = NULL;   /* the event list */
 
 /* possible events: */
 #define  TIMER_INTERRUPT 0  
 #define  FROM_LAYER5     1
-#define  FROM_LAYER3     2
+#define  FROM_LAYER3     2 
 
 #define  OFF             0
 #define  ON              1
@@ -158,9 +155,12 @@ main()
         eventptr = evlist;            /* get next event to simulate */
         if (eventptr==NULL)
            goto terminate;
+
         evlist = evlist->next;        /* remove this event from event list */
+        
         if (evlist!=NULL)
            evlist->prev=NULL;
+
         if (TRACE>=2) {
            printf("\nEVENT time: %f,",eventptr->evtime);
            printf("  type: %d",eventptr->evtype);
@@ -171,7 +171,8 @@ main()
              else
 	     printf(", fromlayer3 ");
            printf(" entity: %d\n",eventptr->eventity);
-           }
+        }
+        
         time = eventptr->evtime;        /* update time to next event time */
         if (nsim==nsimmax)
 	  break;                        /* all done with simulation */
