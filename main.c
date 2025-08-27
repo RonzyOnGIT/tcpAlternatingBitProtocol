@@ -149,7 +149,7 @@ int   ntolayer3;           /* number sent into layer 3 */
 int   nlost;               /* number lost in media */
 int ncorrupt;              /* number corrupted by media*/
 
-main()
+int main()
 {
    struct event *eventptr; // struct event pointer 
    struct msg  msg2give;
@@ -158,12 +158,13 @@ main()
    int i,j;
    char c; 
   
-   // initialize all of global variables
+   // initialize all of global variables, and generate first event 
    init();
 
+   // initialize any A (client) variables
    A_init();
-   B_init();
 
+   B_init();
 
    while (1)  {
 
@@ -292,7 +293,7 @@ void init()                         /* initialize the simulator */
    sum = 0.0;                /* test random number generator for students */
 
    for (i=0; i<1000; i++) {
-      sum= sum + jimsrand();    /* jimsrand() should be uniform in [0,1] */
+      sum = sum + jimsrand();    /* jimsrand() should be uniform in [0,1] */
    }
 
    avg = sum / 1000.0;
@@ -329,6 +330,7 @@ float jimsrand()
 /*  The next set of routines handle the event list   */
 /*****************************************************/
  
+// this runs in init() function
 void generate_next_arrival()
 {
    double x,log(),ceil();
@@ -337,15 +339,17 @@ void generate_next_arrival()
    float ttime;
    int tempint;
 
-   if (TRACE>2) {
+   if (TRACE > 2) {
       printf("          GENERATE NEXT ARRIVAL: creating new arrival\n");
    }
  
    x = lambda*jimsrand()*2;  /* x is uniform on [0,2*lambda] having mean of lambda        */
 
    evptr = (struct event *)malloc(sizeof(struct event));
-   evptr->evtime =  time + x;
-   evptr->evtype =  FROM_LAYER5;
+   evptr->evtime = time + x;
+
+   // getting data from application layer
+   evptr->evtype = FROM_LAYER5;
 
    if (BIDIRECTIONAL && (jimsrand()>0.5) ) {
       evptr->eventity = B;
@@ -361,13 +365,14 @@ void insertevent(struct event *p)
 {
    struct event *q,*qold;
 
-   if (TRACE>2) {
+   if (TRACE > 2) {
       printf("            INSERTEVENT: time is %lf\n",time);
       printf("            INSERTEVENT: future time will be %lf\n",p->evtime); 
    }
 
    q = evlist;     /* q points to header of list in which p struct inserted */
    if (q==NULL) {   /* list is empty */
+      // when init() is first called, q will be NULL so set head of events to equal to generate next event event
       evlist=p;
       p->next=NULL;
       p->prev=NULL;
@@ -378,13 +383,12 @@ void insertevent(struct event *p)
             qold->next = p;
             p->prev = qold;
             p->next = NULL;
-         }
-         else if (q==evlist) { /* front of list */
+         } else if (q==evlist) { /* front of list */
             p->next=evlist;
             p->prev=NULL;
             p->next->prev=p;
             evlist = p;
-         } else {     /* middle of list */
+         } else {   /* middle of list */
             p->next=q;
             p->prev=q->prev;
             q->prev->next=p;
@@ -453,7 +457,6 @@ float increment;
 
    struct event *q;
    struct event *evptr;
-   // char *malloc();
 
    if (TRACE > 2) {
       printf("          START TIMER: starting timer at %f\n",time);
@@ -461,14 +464,14 @@ float increment;
 
    /* be nice: check to see if timer is already started, if so, then  warn */
    /* for (q=evlist; q!=NULL && q->next!=NULL; q = q->next)  */
-   for (q=evlist; q!=NULL; q = q->next) {
+   for (q = evlist; q != NULL; q = q->next) {
       if ( (q->evtype==TIMER_INTERRUPT && q->eventity==AorB) ) { 
          printf("Warning: attempt to start a timer that is already started\n");
          return;
       }
    }
 
-/* create future event for when timer goes off */
+   /* create future event for when timer goes off */
    evptr = (struct event *)malloc(sizeof(struct event));
    evptr->evtime =  time + increment;
    evptr->evtype =  TIMER_INTERRUPT;
@@ -479,7 +482,7 @@ float increment;
 
 // so this is sending data from application 5 to out tcp layer 
 /************************** TOLAYER3 ***************/
-tolayer3(AorB,packet)
+void tolayer3(AorB,packet)
 int AorB;  /* A or B is trying to stop timer */
 struct pkt packet;
 {
@@ -565,7 +568,7 @@ struct pkt packet;
    insertevent(evptr);
 } 
 
-tolayer5(AorB,datasent)
+void tolayer5(AorB,datasent)
   int AorB;
   char datasent[20];
 {
