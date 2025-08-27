@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 /* ******************************************************************
  ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: VERSION 1.1  J.F.Kurose
@@ -34,9 +35,25 @@ struct pkt {
    char payload[20]; // msg
 };
 
+// remember that events are - timeout, from application layer or from bottom layer
+struct event {
+   float evtime;           /* event time */
+   int evtype;             /* event type code */
+   int eventity;           /* entity where event occurs, A or B*/
+   struct pkt *pktptr;     /* ptr to packet (if any) assoc w/ this event */
+   struct event *prev;
+   struct event *next;
+};
+struct event *evlist = NULL;   /* the event list (head) */
+
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
+// initializes the simulation
+void init();
 
+void generate_next_arrival();
+
+void insertevent(struct event *);
 
 
 /* called from layer 5 (application layer), passed the data to be sent to other side */
@@ -61,14 +78,14 @@ void A_input(struct pkt packet)
 }
 
 /* called when A's timer goes off */
-A_timerinterrupt()
+void A_timerinterrupt()
 {
 
 }  
 
 /* the following routine will be called once (only) before any other entity A routines are called. 
 You can use it to do any initialization */
-A_init()
+void A_init()
 {
 }
 
@@ -76,19 +93,19 @@ A_init()
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
 /* called from layer 3 (network layer), when a packet arrives for layer 4 at B*/
-B_input(packet)
+void B_input(packet)
   struct pkt packet;
 {
 }
 
 /* called when B's timer goes off */
-B_timerinterrupt()
+void B_timerinterrupt()
 {
 }
 
 /* the following rouytine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
-B_init()
+void B_init()
 {
 }
 
@@ -109,16 +126,6 @@ the emulator, you're welcome to look at the code - but again, you should have
 to, and you defeinitely should not have to modify
 ******************************************************************/
 
-// remember that events are - timeout, from application layer or from bottom layer
-struct event {
-   float evtime;           /* event time */
-   int evtype;             /* event type code */
-   int eventity;           /* entity where event occurs, A or B*/
-   struct pkt *pktptr;     /* ptr to packet (if any) assoc w/ this event */
-   struct event *prev;
-   struct event *next;
-};
-struct event *evlist = NULL;   /* the event list (head) */
 
 /* possible events: */
 #define  TIMER_INTERRUPT 0  
@@ -129,7 +136,6 @@ struct event *evlist = NULL;   /* the event list (head) */
 #define  ON              1
 #define   A    0
 #define   B    1
-
 
 // ------------------------- Global Variables -----------------------------------------------
 int TRACE = 2;             /* for my debugging */
@@ -253,19 +259,22 @@ main()
       free(eventptr);
    }
 
-terminate:
-   printf(" Simulator terminated at time %f\n after sending %d msgs from layer5\n",time,nsim);
+   return 1;
+
+   terminate:
+      printf(" Simulator terminated at time %f\n after sending %d msgs from layer5\n",time,nsim);
+      return 1;
+
 }
 
 
 
-init()                         /* initialize the simulator */
+void init()                         /* initialize the simulator */
 {
 
    int i;
    float sum, avg;
    float jimsrand();
-  
   
    printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
    printf("Enter the number of messages to simulate: ");
@@ -283,7 +292,7 @@ init()                         /* initialize the simulator */
    sum = 0.0;                /* test random number generator for students */
 
    for (i=0; i<1000; i++) {
-      sum=sum+jimsrand();    /* jimsrand() should be uniform in [0,1] */
+      sum= sum + jimsrand();    /* jimsrand() should be uniform in [0,1] */
    }
 
    avg = sum / 1000.0;
@@ -292,7 +301,7 @@ init()                         /* initialize the simulator */
       printf("It is likely that random number generation on your machine\n" ); 
       printf("is different from what this emulator expects.  Please take\n");
       printf("a look at the routine jimsrand() in the emulator code. Sorry. \n");
-      exit();
+      exit(-1);
    }
 
    ntolayer3 = 0;
@@ -320,11 +329,11 @@ float jimsrand()
 /*  The next set of routines handle the event list   */
 /*****************************************************/
  
-generate_next_arrival()
+void generate_next_arrival()
 {
    double x,log(),ceil();
    struct event *evptr;
-   char *malloc();
+   // char *malloc();
    float ttime;
    int tempint;
 
@@ -348,44 +357,43 @@ generate_next_arrival()
 } 
 
 
-insertevent(struct event *p)
+void insertevent(struct event *p)
 {
    struct event *q,*qold;
 
    if (TRACE>2) {
       printf("            INSERTEVENT: time is %lf\n",time);
       printf("            INSERTEVENT: future time will be %lf\n",p->evtime); 
-      }
+   }
+
    q = evlist;     /* q points to header of list in which p struct inserted */
    if (q==NULL) {   /* list is empty */
-        evlist=p;
-        p->next=NULL;
-        p->prev=NULL;
-        }
-     else {
-        for (qold = q; q !=NULL && p->evtime > q->evtime; q=q->next)
-              qold=q; 
-        if (q==NULL) {   /* end of list */
-             qold->next = p;
-             p->prev = qold;
-             p->next = NULL;
-             }
-           else if (q==evlist) { /* front of list */
-             p->next=evlist;
-             p->prev=NULL;
-             p->next->prev=p;
-             evlist = p;
-             }
-           else {     /* middle of list */
-             p->next=q;
-             p->prev=q->prev;
-             q->prev->next=p;
-             q->prev=p;
-             }
+      evlist=p;
+      p->next=NULL;
+      p->prev=NULL;
+   } else {
+      for (qold = q; q !=NULL && p->evtime > q->evtime; q=q->next)
+            qold=q; 
+      if (q==NULL) {   /* end of list */
+            qold->next = p;
+            p->prev = qold;
+            p->next = NULL;
          }
+         else if (q==evlist) { /* front of list */
+            p->next=evlist;
+            p->prev=NULL;
+            p->next->prev=p;
+            evlist = p;
+         } else {     /* middle of list */
+            p->next=q;
+            p->prev=q->prev;
+            q->prev->next=p;
+            q->prev=p;
+         }
+   }
 }
 
-printevlist()
+void printevlist()
 {
 
    struct event *q;
@@ -405,7 +413,7 @@ printevlist()
 
 /* called by students routine to cancel a previously-started timer */
 /* A or B is trying to stop timer */
-stoptimer(int AorB)
+void stoptimer(int AorB)
 {
 
    struct event *q,*qold;
@@ -438,16 +446,16 @@ stoptimer(int AorB)
 }
 
 
-starttimer(AorB,increment)
+void starttimer(AorB,increment)
 int AorB;  /* A or B is trying to stop timer */
 float increment;
 {
 
    struct event *q;
    struct event *evptr;
-   char *malloc();
+   // char *malloc();
 
-   if (TRACE>2) {
+   if (TRACE > 2) {
       printf("          START TIMER: starting timer at %f\n",time);
    }
 
@@ -478,7 +486,7 @@ struct pkt packet;
 
    struct pkt *mypktptr;
    struct event *evptr,*q;
-   char *malloc();
+   // char *malloc();
    float lastime, x, jimsrand();
    int i;
 
@@ -545,12 +553,12 @@ struct pkt packet;
          mypktptr->acknum = 999999;
       }
 
-      if (TRACE>0) {
+      if (TRACE > 0) {
          printf("          TOLAYER3: packet being corrupted\n");
       }
    }  
 
-   if (TRACE>2) {
+   if (TRACE > 2) {
       printf("          TOLAYER3: scheduling arrival on other side\n");
    }
 
