@@ -169,7 +169,7 @@ int main()
    while (1)  {
 
       // evenptr is right now null but when ready to test it will hold array of events [timeout, from layer 5, etc]
-      eventptr = evlist;            /* get next event to simulate, set this equal to some other event to test, initially null */
+      eventptr = evlist;     /* get next event to simulate, set this equal to some other event to test, initially null */
       
       // no current events so finished sending data, exit
       if (eventptr==NULL) {
@@ -184,14 +184,13 @@ int main()
          evlist->prev=NULL;
       }
 
-
-      if (TRACE>=2) {
+      if (TRACE >= 2) {
          printf("\nEVENT time: %f,",eventptr->evtime);
          printf("  type: %d",eventptr->evtype);
 
-         if (eventptr->evtype==0) {
+         if (eventptr->evtype == 0) {
             printf(", timerinterrupt  ");
-         } else if (eventptr->evtype==1) {
+         } else if (eventptr->evtype == 1) {
             printf(", fromlayer5 ");
          } else {
             printf(", fromlayer3 ");
@@ -200,7 +199,7 @@ int main()
       }
         
       time = eventptr->evtime;        /* update time to next event time */
-      if (nsim==nsimmax) {
+      if (nsim == nsimmax) {
 	      break;                        /* all done with simulation */
       }
 
@@ -211,15 +210,17 @@ int main()
          /* fill in msg to give with string of same letter */    
          j = nsim % 26; 
 
-         for (i=0; i<20; i++) {
+         for (i = 0; i < 20; i++) {
             msg2give.data[i] = 97 + j;
          }  
 
-         if (TRACE>2) {
+         if (TRACE > 2) {
             printf("          MAINLOOP: data given to student: ");
-            for (i=0; i<20; i++) {
+
+            for (i = 0; i < 20; i++) {
                printf("%c", msg2give.data[i]);
             }
+
             printf("\n");
 	      }
 
