@@ -60,6 +60,7 @@ void insertevent(struct event *);
 // create packet and create checksum
 void A_output(struct msg message)
 {
+   // struct pkt sndPkt = {a_next_sequence_num, }
    // check to see whether to use sequence 0 or 1
    // checksum will consist of TCP header + TCP body + pseudo ip header
    // Pseudo IP (12 bytes) = Source IP (32 bits) + Destination IP (32 bits) + 8 bits + Protocol field (8 bits) + TCP seg lengh (8 bits)
@@ -78,6 +79,7 @@ void A_input(struct pkt packet)
 }
 
 /* called when A's timer goes off */
+// in this case, since timeout happened have to resend the packet and reset the timer
 void A_timerinterrupt()
 {
 
@@ -85,8 +87,10 @@ void A_timerinterrupt()
 
 /* the following routine will be called once (only) before any other entity A routines are called. 
 You can use it to do any initialization */
+// I'm gonna use it to initialize my sequence number to 0 
 void A_init()
 {
+   a_next_sequence_num = 0;
 }
 
 
@@ -138,16 +142,17 @@ to, and you defeinitely should not have to modify
 #define   B    1
 
 // ------------------------- Global Variables -----------------------------------------------
-int TRACE = 2;             /* for my debugging */
+int TRACE = 0;             /* for my debugging */
 int nsim = 0;              /* number of messages from 5 to 4 so far */ 
 int nsimmax = 0;           /* number of msgs to generate, then stop */
 float time = 0.000;
 float lossprob;            /* probability that a packet is dropped  */
 float corruptprob;         /* probability that one bit is packet is flipped */
 float lambda;              /* arrival rate of messages from layer 5 */   
-int   ntolayer3;           /* number sent into layer 3 */
+int   ntolayer3;           /* number sent into layer 3 (network layer)*/
 int   nlost;               /* number lost in media */
 int ncorrupt;              /* number corrupted by media*/
+int a_next_sequence_num;   // will keep track of the next sequence number for A 
 
 int main()
 {
@@ -172,16 +177,16 @@ int main()
       eventptr = evlist;     /* get next event to simulate, set this equal to some other event to test, initially null */
       
       // no current events so finished sending data, exit
-      if (eventptr==NULL) {
+      if (eventptr == NULL) {
          goto terminate;
       }
 
       evlist = evlist->next;        /* remove this event from event list */
       
-      // if after getting the next event, its non existant, 
-      if (evlist!=NULL){
-         // think about freeing here? because means that no next event
-         evlist->prev=NULL;
+      // means that there is another event after current one is done 
+      if (evlist != NULL){
+         // think about freeing here, nvm i think no free cause if we free prev (current) then wont be able to access current? because means that no next event
+         evlist->prev = NULL;
       }
 
       if (TRACE >= 2) {
@@ -276,7 +281,7 @@ void init()                         /* initialize the simulator */
 
    int i;
    float sum, avg;
-   float jimsrand();
+   float jimsrand(); // generates some random float value
   
    printf("-----  Stop and Wait Network Simulator Version 1.1 -------- \n\n");
    printf("Enter the number of messages to simulate: ");
@@ -293,7 +298,7 @@ void init()                         /* initialize the simulator */
    srand(9999);              /* init random number generator */
    sum = 0.0;                /* test random number generator for students */
 
-   for (i=0; i<1000; i++) {
+   for (i = 0; i < 1000; i++) {
       sum = sum + jimsrand();    /* jimsrand() should be uniform in [0,1] */
    }
 
@@ -306,7 +311,7 @@ void init()                         /* initialize the simulator */
       exit(-1);
    }
 
-   ntolayer3 = 0;
+   ntolayer3 = 0; // initialize amount of segments sent into layer 3 (network layer)
    nlost = 0;
    ncorrupt = 0;
 
@@ -344,7 +349,7 @@ void generate_next_arrival()
       printf("          GENERATE NEXT ARRIVAL: creating new arrival\n");
    }
  
-   x = lambda*jimsrand()*2;  /* x is uniform on [0,2*lambda] having mean of lambda        */
+   x = lambda * jimsrand() * 2;  /* x is uniform on [0,2*lambda] having mean of lambda        */
 
    evptr = (struct event *)malloc(sizeof(struct event));
    evptr->evtime = time + x;
@@ -355,6 +360,7 @@ void generate_next_arrival()
    if (BIDIRECTIONAL && (jimsrand()>0.5) ) {
       evptr->eventity = B;
    } else {
+      // A receives data from layer 5 (application layer), send to B
       evptr->eventity = A;
    }
 
@@ -364,7 +370,11 @@ void generate_next_arrival()
 
 void insertevent(struct event *p)
 {
+   // q will be used reference global event list
+   // qold will be used to reference q and traverse it
    struct event *q,*qold;
+
+   // 3 event pointer structs
 
    if (TRACE > 2) {
       printf("            INSERTEVENT: time is %lf\n",time);
@@ -372,19 +382,19 @@ void insertevent(struct event *p)
    }
 
    q = evlist;     /* q points to header of list in which p struct inserted */
-   if (q==NULL) {   /* list is empty */
-      // when init() is first called, q will be NULL so set head of events to equal to generate next event event
-      evlist=p;
-      p->next=NULL;
-      p->prev=NULL;
+   if (q == NULL) {   /* list is empty */
+      // when init() is first called, q will be NULL because evlist is NULL so set head of events to equal to generate next event event
+      evlist = p; // evlist (global event linked list is empty so set it to new head)
+      p->next = NULL;
+      p->prev = NULL;
    } else {
-      for (qold = q; q !=NULL && p->evtime > q->evtime; q=q->next)
+      for (qold = q; q !=NULL && p->evtime > q->evtime; q = q->next)
             qold=q; 
-      if (q==NULL) {   /* end of list */
+      if (q == NULL) {   /* end of list */
             qold->next = p;
             p->prev = qold;
             p->next = NULL;
-         } else if (q==evlist) { /* front of list */
+         } else if (q == evlist) { /* front of list */
             p->next=evlist;
             p->prev=NULL;
             p->next->prev=p;
@@ -400,12 +410,11 @@ void insertevent(struct event *p)
 
 void printevlist()
 {
-
    struct event *q;
    int i;
    printf("--------------\nEvent List Follows:\n");
 
-   for(q = evlist; q!=NULL; q=q->next) {
+   for(q = evlist; q != NULL; q = q->next) {
       printf("Event time: %f, type: %d entity: %d\n",q->evtime,q->evtype,q->eventity);
    }
 
@@ -420,24 +429,23 @@ void printevlist()
 /* A or B is trying to stop timer */
 void stoptimer(int AorB)
 {
-
    struct event *q,*qold;
 
-   if (TRACE>2) {
+   if (TRACE > 2) {
       printf("          STOP TIMER: stopping timer at %f\n",time);
    }
 
    /* for (q=evlist; q!=NULL && q->next!=NULL; q = q->next)  */
-   for (q=evlist; q!=NULL ; q = q->next) {
-      if ( (q->evtype==TIMER_INTERRUPT  && q->eventity==AorB) ) {
+   for (q = evlist; q != NULL ; q = q->next) {
+      if ( (q->evtype == TIMER_INTERRUPT  && q->eventity == AorB) ) {
          /* remove this event */
-         if (q->next==NULL && q->prev==NULL) {
-            evlist=NULL;         /* remove first and only event on list */
-         } else if (q->next==NULL) {
+         if (q->next == NULL && q->prev == NULL) {
+            evlist = NULL;         /* remove first and only event on list */
+         } else if (q->next == NULL) {
             /* end of list - there is one in front */
             q->prev->next = NULL;
-         } else if (q==evlist) { /* front of list - there must be event after */
-            q->next->prev=NULL;
+         } else if (q == evlist) { /* front of list - there must be event after */
+            q->next->prev = NULL;
             evlist = q->next;
          } else {   /* middle of list */
             q->next->prev = q->prev;
@@ -451,11 +459,10 @@ void stoptimer(int AorB)
 }
 
 
-void starttimer(AorB,increment)
+void starttimer(AorB, increment)
 int AorB;  /* A or B is trying to stop timer */
 float increment;
 {
-
    struct event *q;
    struct event *evptr;
 
@@ -466,7 +473,7 @@ float increment;
    /* be nice: check to see if timer is already started, if so, then  warn */
    /* for (q=evlist; q!=NULL && q->next!=NULL; q = q->next)  */
    for (q = evlist; q != NULL; q = q->next) {
-      if ( (q->evtype==TIMER_INTERRUPT && q->eventity==AorB) ) { 
+      if ( (q->evtype == TIMER_INTERRUPT && q->eventity == AorB) ) { 
          printf("Warning: attempt to start a timer that is already started\n");
          return;
       }
@@ -500,7 +507,7 @@ struct pkt packet;
    /* simulate losses: */
    if (jimsrand() < lossprob)  {
       nlost++;
-      if (TRACE>0)    
+      if (TRACE > 0)    
 	   printf("          TOLAYER3: packet being lost\n");
       return;
    }  
@@ -512,15 +519,15 @@ struct pkt packet;
    mypktptr->acknum = packet.acknum;
    mypktptr->checksum = packet.checksum;
 
-   for (i=0; i<20; i++) {
+   for (i = 0; i < 20; i++) {
       mypktptr->payload[i] = packet.payload[i];
    }
 
-   if (TRACE>2)  {
+   if (TRACE > 2)  {
 
       printf("          TOLAYER3: seq: %d, ack %d, check: %d ", mypktptr->seqnum,mypktptr->acknum,  mypktptr->checksum);
 
-      for (i=0; i<20; i++) {
+      for (i = 0; i < 20; i++) {
          printf("%c",mypktptr->payload[i]);
       }
 
