@@ -19,6 +19,20 @@
 #define BIDIRECTIONAL 0 /* change to 1 if you're doing extra credit */
                         /* and write a routine called B_output */
 
+/* possible events: */
+#define TIMER_INTERRUPT 0
+#define FROM_LAYER5 1
+#define FROM_LAYER3 2
+
+#define OFF 0
+#define ON 1
+#define A 0
+#define B 1
+
+int aNextSequenceNum; // will keep track of the next sequence number for A
+int aExpectedAck;
+int awaitingForAck;
+
 /* a "msg" is the data unit passed from layer 5 (teachers code / application layer) to layer  */
 /* 4 (students' code / transport layer).  It contains the data (characters) to be delivered */
 /* to layer 5 via the students transport level protocol entities.         */
@@ -55,22 +69,38 @@ struct event *evlist = NULL; /* the event list (head) */
 // initializes the simulation
 void init();
 
+unsigned int calculate_checksum(struct pkt);
+
 void generate_next_arrival();
 
 void insertevent(struct event *);
+
+void starttimer(int, float);
+
+void tolayer3(int, struct pkt);
+
+void stoptimer(int);
 
 /* called from layer 5 (application layer), passed the data to be sent to other side */
 // create packet and create checksum
 void A_output(struct msg message)
 {
-
     // so in this case have to
     struct pkt sndPkt = {};
+
+    if (awaitingForAck)
+    {
+        printf("A_output: still waiting for ACK, ignoring message\n");
+        return;
+    }
+
     sndPkt.seqnum = aNextSequenceNum;
-    memset(sndPkt.payload, message.data, 20);
+    memcpy(sndPkt.payload, message.data, 20);
     sndPkt.checksum = calculate_checksum(sndPkt);
-    // checksum will consist of TCP header + TCP body + pseudo ip header
-    // Pseudo IP (12 bytes) = Source IP (32 bits) + Destination IP (32 bits) + 8 bits + Protocol field (8 bits) + TCP seg lengh (8 bits)
+
+    starttimer(A, 15.0); // for now set the timeout interval for 15, come back and review chapter 3.5.3 to figure out formula to use to calcualte appropriate interval
+
+    tolayer3(A, sndPkt);
 }
 
 void B_output(struct msg message) /* need be completed only for extra credit */
@@ -80,6 +110,21 @@ void B_output(struct msg message) /* need be completed only for extra credit */
 /* called from layer 3, when a packet arrives for layer 4 */
 void A_input(struct pkt packet)
 {
+
+    // corrupt packet, ignore for now
+    if (packet.payload[0] == 'Z')
+    {
+        return;
+    }
+
+    if (packet.acknum == aNextSequenceNum)
+    {
+        stoptimer(A);
+        aNextSequenceNum = (aNextSequenceNum + 1) % 2;
+        awaitingForAck = 0;
+    }
+    // have to check first that it is not corrupted, and that
+    //   mypktptr->payload[0] = 'Z'; /* corrupt payload */
 }
 
 /* called when A's timer goes off */
@@ -95,6 +140,7 @@ void A_init()
 {
     aNextSequenceNum = 0;
     aExpectedAck = 1;
+    awaitingForAck = 1; // global variable that keeps track of if waiting for a packet to be ACKed
 }
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
@@ -144,29 +190,17 @@ the emulator, you're welcome to look at the code - but again, you should have
 to, and you defeinitely should not have to modify
 ******************************************************************/
 
-/* possible events: */
-#define TIMER_INTERRUPT 0
-#define FROM_LAYER5 1
-#define FROM_LAYER3 2
-
-#define OFF 0
-#define ON 1
-#define A 0
-#define B 1
-
 // ------------------------- Global Variables -----------------------------------------------
 int TRACE = 0;   /* for my debugging */
 int nsim = 0;    /* number of messages from 5 to 4 so far */
 int nsimmax = 0; /* number of msgs to generate, then stop */
 float time = 0.000;
-float lossprob;       /* probability that a packet is dropped  */
-float corruptprob;    /* probability that one bit is packet is flipped */
-float lambda;         /* arrival rate of messages from layer 5 */
-int ntolayer3;        /* number sent into layer 3 (network layer)*/
-int nlost;            /* number lost in media */
-int ncorrupt;         /* number corrupted by media*/
-int aNextSequenceNum; // will keep track of the next sequence number for A
-int aExpectedAck;
+float lossprob;    /* probability that a packet is dropped  */
+float corruptprob; /* probability that one bit is packet is flipped */
+float lambda;      /* arrival rate of messages from layer 5 */
+int ntolayer3;     /* number sent into layer 3 (network layer)*/
+int nlost;         /* number lost in media */
+int ncorrupt;      /* number corrupted by media*/
 
 int main()
 {
@@ -522,8 +556,8 @@ void stoptimer(int AorB)
     printf("Warning: unable to cancel your timer. It wasn't running.\n");
 }
 
-void starttimer(AorB, increment) int AorB; /* A or B is trying to stop timer */
-float increment;
+// increment is the timeout interval
+void starttimer(int AorB, float increment) /* A or B is trying to stop timer */
 {
     struct event *q;
     struct event *evptr;
@@ -554,8 +588,7 @@ float increment;
 
 // so this is sending data from application 5 to out tcp layer
 /************************** TOLAYER3 ***************/
-void tolayer3(AorB, packet) int AorB; /* A or B is trying to stop timer */
-struct pkt packet;
+void tolayer3(int AorB, struct pkt packet) /* A or B is trying to stop timer */
 {
 
     struct pkt *mypktptr;
