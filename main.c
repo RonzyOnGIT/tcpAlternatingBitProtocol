@@ -29,10 +29,6 @@
 #define A 0
 #define B 1
 
-int aNextSequenceNum; // will keep track of the next sequence number for A
-int aExpectedAck;
-int awaitingForAck;
-
 /* a "msg" is the data unit passed from layer 5 (teachers code / application layer) to layer  */
 /* 4 (students' code / transport layer).  It contains the data (characters) to be delivered */
 /* to layer 5 via the students transport level protocol entities.         */
@@ -64,6 +60,11 @@ struct event
 };
 struct event *evlist = NULL; /* the event list (head) */
 
+int aNextSequenceNum; // will keep track of the next sequence number for A
+int aExpectedAck;
+int awaitingForAck;
+struct pkt last_pkt_sent = {}; // will keep track of the last packet that was sent from TCP layer to network layer
+
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
 // initializes the simulation
@@ -88,7 +89,7 @@ void A_output(struct msg message)
     // so in this case have to
     struct pkt sndPkt = {};
 
-    if (awaitingForAck)
+    if (awaitingForAck == 1)
     {
         printf("A_output: still waiting for ACK, ignoring message\n");
         return;
@@ -98,7 +99,13 @@ void A_output(struct msg message)
     memcpy(sndPkt.payload, message.data, 20);
     sndPkt.checksum = calculate_checksum(sndPkt);
 
+    last_pkt_sent.seqnum = aNextSequenceNum;
+    memcpy(last_pkt_sent.payload, message.data, 20);
+    last_pkt_sent.seqnum = sndPkt.checksum;
+
     starttimer(A, 15.0); // for now set the timeout interval for 15, come back and review chapter 3.5.3 to figure out formula to use to calcualte appropriate interval
+
+    awaitingForAck = 1; // since the packet is going to be sent, do not want anymore packets to be sent until the one we are going to send has been acked
 
     tolayer3(A, sndPkt);
 }
@@ -114,6 +121,7 @@ void A_input(struct pkt packet)
     // corrupt packet, ignore for now
     if (packet.payload[0] == 'Z')
     {
+        printf("packet is corrupt\n");
         return;
     }
 
@@ -123,7 +131,6 @@ void A_input(struct pkt packet)
         aNextSequenceNum = (aNextSequenceNum + 1) % 2;
         awaitingForAck = 0;
     }
-    // have to check first that it is not corrupted, and that
     //   mypktptr->payload[0] = 'Z'; /* corrupt payload */
 }
 
@@ -131,6 +138,10 @@ void A_input(struct pkt packet)
 // in this case, since timeout happened have to resend the packet and reset the timer
 void A_timerinterrupt()
 {
+    printf("timer interrupt, restarting timer, and resending the last previously sent packet\n");
+    starttimer(A, 15);
+
+    tolayer3(A, last_pkt_sent);
 }
 
 /* the following routine will be called once (only) before any other entity A routines are called.
@@ -140,7 +151,7 @@ void A_init()
 {
     aNextSequenceNum = 0;
     aExpectedAck = 1;
-    awaitingForAck = 1; // global variable that keeps track of if waiting for a packet to be ACKed
+    awaitingForAck = 0; // global variable that keeps track of if waiting for a packet to be ACKed
 }
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
@@ -593,7 +604,6 @@ void tolayer3(int AorB, struct pkt packet) /* A or B is trying to stop timer */
 
     struct pkt *mypktptr;
     struct event *evptr, *q;
-    // char *malloc();
     float lastime, x, jimsrand();
     int i;
 
