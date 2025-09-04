@@ -26,6 +26,7 @@
 
 #define OFF 0
 #define ON 1
+// both A and B represent TCP at layer 4 which either receive data from layer 3 (network) or are sending to layer 5 (application layer)
 #define A 0
 #define B 1
 
@@ -63,12 +64,15 @@ struct event *evlist = NULL; /* the event list (head) */
 int aNextSequenceNum; // will keep track of the next sequence number for A
 int aExpectedAck;
 int awaitingForAck;
+int bExpectedSequenceNum;
 struct pkt last_pkt_sent = {}; // will keep track of the last packet that was sent from TCP layer to network layer
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
 // initializes the simulation
 void init();
+
+void B_init();
 
 unsigned int calculate_checksum(struct pkt);
 
@@ -80,9 +84,11 @@ void starttimer(int, float);
 
 void tolayer3(int, struct pkt);
 
+void tolayer5(int, char[20]);
+
 void stoptimer(int);
 
-/* called from layer 5 (application layer), passed the data to be sent to other side */
+/* called from layer 5 (application layer) to send to network layer, passed the data to be sent to other side */
 // create packet and create checksum
 void A_output(struct msg message)
 {
@@ -99,9 +105,7 @@ void A_output(struct msg message)
     memcpy(sndPkt.payload, message.data, 20);
     sndPkt.checksum = calculate_checksum(sndPkt);
 
-    last_pkt_sent.seqnum = aNextSequenceNum;
-    memcpy(last_pkt_sent.payload, message.data, 20);
-    last_pkt_sent.seqnum = sndPkt.checksum;
+    last_pkt_sent = sndPkt;
 
     starttimer(A, 15.0); // for now set the timeout interval for 15, come back and review chapter 3.5.3 to figure out formula to use to calcualte appropriate interval
 
@@ -114,7 +118,7 @@ void B_output(struct msg message) /* need be completed only for extra credit */
 {
 }
 
-/* called from layer 3, when a packet arrives for layer 4 */
+/* called from layer 3, when a packet arrives for layer 4 (TCP) */
 void A_input(struct pkt packet)
 {
 
@@ -129,9 +133,8 @@ void A_input(struct pkt packet)
     {
         stoptimer(A);
         aNextSequenceNum = (aNextSequenceNum + 1) % 2;
-        awaitingForAck = 0;
+        awaitingForAck = 0; // received a new packet, no longer waiting for anything
     }
-    //   mypktptr->payload[0] = 'Z'; /* corrupt payload */
 }
 
 /* called when A's timer goes off */
@@ -156,9 +159,34 @@ void A_init()
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
-/* called from layer 3 (network layer), when a packet arrives for layer 4 at B*/
-void B_input(packet) struct pkt packet;
+/* called from layer 3 (network layer), when a packet arrives for layer 4 at B (TCP)*/
+void B_input(struct pkt packet)
 {
+    // check for corruption, check that the sequence is equal to expected seq num
+
+    // also have to send an ACK back to A (tolayer(3))
+    if (packet.payload[0] == 'Z')
+    {
+        printf("received corrupt packet, will not send it to layer 5\n");
+        return;
+    }
+
+    // make sure receiving packet sequence number alligns with expected sequence num
+    if (packet.seqnum == bExpectedSequenceNum)
+    {
+        tolayer5(B, packet.payload);
+
+        struct pkt ack_pkt = {};
+
+        ack_pkt.seqnum = 0;
+        ack_pkt.acknum = packet.seqnum;
+        ack_pkt.checksum = calculate_checksum(ack_pkt);
+
+        // send the packet back to layer 3 so that it can be sent back to A
+        tolayer3(B, ack_pkt);
+
+        bExpectedSequenceNum = (bExpectedSequenceNum + 1) % 2;
+    }
 }
 
 /* called when B's timer goes off */
@@ -170,12 +198,12 @@ void B_timerinterrupt()
 /* entity B routines are called. You can use it to do any initialization */
 void B_init()
 {
+    bExpectedSequenceNum = 0;
 }
 
 unsigned int calculate_checksum(struct pkt pktSnd)
 {
     int checksum = 0;
-    checksum += pktSnd.checksum;
     checksum += pktSnd.acknum;
     for (int i = 0; i < 20; i++)
     {
@@ -695,8 +723,7 @@ void tolayer3(int AorB, struct pkt packet) /* A or B is trying to stop timer */
     insertevent(evptr);
 }
 
-void tolayer5(AorB, datasent) int AorB;
-char datasent[20];
+void tolayer5(int AorB, char datasent[20])
 {
     int i;
 
