@@ -30,6 +30,8 @@
 #define A 0
 #define B 1
 
+// next thing to work on is to not create a queue so that packets aren't just dropped when waiting for ACK
+
 /* a "msg" is the data unit passed from layer 5 (teachers code / application layer) to layer  */
 /* 4 (students' code / transport layer).  It contains the data (characters) to be delivered */
 /* to layer 5 via the students transport level protocol entities.         */
@@ -60,6 +62,15 @@ struct event
     struct event *next;
 };
 struct event *evlist = NULL; /* the event list (head) */
+
+// when waiting for a pkt to be ACKed, it will place waiting packet into queue until ACKed
+struct queue
+{
+    struct event *headEvent;
+    struct event *tailEvent;
+    int size;
+    int capacity;
+};
 
 int aNextSequenceNum; // will keep track of the next sequence number for A
 int aExpectedAck;
@@ -98,6 +109,7 @@ void A_output(struct msg message)
     if (awaitingForAck == 1)
     {
         printf("A_output: still waiting for ACK, ignoring message\n");
+        // create packet and insert at tail of queue
         return;
     }
 
@@ -159,7 +171,7 @@ void A_init()
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
-/* called from layer 3 (network layer), when a packet arrives for layer 4 at B (TCP)*/
+/* called when a packet arrives for layer 4 at B (TCP) */
 void B_input(struct pkt packet)
 {
     // check for corruption, check that the sequence is equal to expected seq num
@@ -194,7 +206,7 @@ void B_timerinterrupt()
 {
 }
 
-/* the following rouytine will be called once (only) before any other */
+/* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
 void B_init()
 {
@@ -295,8 +307,24 @@ int main()
             else
             {
                 printf(", fromlayer3 ");
+                // packet was sent from layer 3 and its A that is receiving, meaning a packet that was sent was ACKed
+                // if (eventptr->eventity == A)
+                // {
+                //     printf(" entity: A (ACK)\n");
+                // }
             }
-            printf(" entity: %d\n", eventptr->eventity);
+            if (eventptr->eventity == 0)
+            {
+                printf(" entity: A\n");
+            }
+            else if (eventptr->eventity == 1)
+            {
+                printf(" entity: B\n");
+            }
+            else
+            {
+                printf("not valid entity\n");
+            }
         }
 
         time = eventptr->evtime; /* update time to next event time */
