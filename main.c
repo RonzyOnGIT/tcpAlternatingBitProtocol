@@ -130,7 +130,7 @@ void B_output(struct msg message) /* need be completed only for extra credit */
 {
 }
 
-/* called from layer 3, when a packet arrives for layer 4 (TCP) */
+/* called from layer 3, when a packet arrives for layer 4 (TCP) to A */
 void A_input(struct pkt packet)
 {
 
@@ -141,10 +141,11 @@ void A_input(struct pkt packet)
         return;
     }
 
-    if (packet.acknum == aNextSequenceNum)
+    if (packet.acknum == aExpectedAck)
     {
         stoptimer(A);
         aNextSequenceNum = (aNextSequenceNum + 1) % 2;
+        aExpectedAck = aNextSequenceNum;
         awaitingForAck = 0; // received a new packet, no longer waiting for anything
     }
 }
@@ -164,9 +165,9 @@ You can use it to do any initialization */
 // I'm gonna use it to initialize my sequence number to 0
 void A_init()
 {
-    aNextSequenceNum = 0;
-    aExpectedAck = 1;
-    awaitingForAck = 0; // global variable that keeps track of if waiting for a packet to be ACKed
+    aNextSequenceNum = 0; // initialize sequence number to zero
+    aExpectedAck = 0;     // this is wrong, should expect an ACK of zero
+    awaitingForAck = 0;   // global variable that keeps track of if waiting for a packet to be ACKed
 }
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
@@ -296,34 +297,31 @@ int main()
             printf("\nEVENT time: %f,", eventptr->evtime);
             printf("  type: %d", eventptr->evtype);
 
-            if (eventptr->evtype == 0)
+            if (eventptr->evtype == TIMER_INTERRUPT)
             {
                 printf(", timerinterrupt  ");
             }
-            else if (eventptr->evtype == 1)
+            else if (eventptr->evtype == FROM_LAYER5)
             {
                 printf(", fromlayer5 ");
             }
-            else
+            else if (eventptr->evtype == FROM_LAYER3)
             {
+
                 printf(", fromlayer3 ");
-                // packet was sent from layer 3 and its A that is receiving, meaning a packet that was sent was ACKed
-                // if (eventptr->eventity == A)
-                // {
-                //     printf(" entity: A (ACK)\n");
-                // }
             }
-            if (eventptr->eventity == 0)
+
+            if (eventptr->eventity == A && eventptr->evtype == FROM_LAYER3)
             {
-                printf(" entity: A\n");
+                printf(" entity: A (ACK pkt)\n");
             }
-            else if (eventptr->eventity == 1)
+            else if (eventptr->eventity == A)
+            {
+                printf("entity: A\n");
+            }
+            else if (eventptr->eventity == B)
             {
                 printf(" entity: B\n");
-            }
-            else
-            {
-                printf("not valid entity\n");
             }
         }
 
