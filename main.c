@@ -77,6 +77,7 @@ int aExpectedAck;
 int awaitingForAck;
 int bExpectedSequenceNum;
 struct pkt last_pkt_sent = {}; // will keep track of the last packet that was sent from TCP layer to network layer
+struct pkt last_ack_pkt_sent = {};
 
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
@@ -110,6 +111,8 @@ void A_output(struct msg message)
     {
         printf("A_output: still waiting for ACK, ignoring message\n");
         // create packet and insert at tail of queue
+        // first make sure that we have enough room to insert, if not then it will get dropped
+
         return;
     }
 
@@ -137,7 +140,7 @@ void A_input(struct pkt packet)
     // corrupt packet, ignore for now
     if (packet.payload[0] == 'Z')
     {
-        printf("packet is corrupt\n");
+        printf("packet is corrupt, ignoring it\n");
         return;
     }
 
@@ -172,7 +175,7 @@ void A_init()
 
 /* Note that with simplex transfer from a-to-B, there is no B_output() */
 
-/* called when a packet arrives for layer 4 at B (TCP) */
+/* called when a packet arrives for layer 4 at B (TCP) from layer 3 (network layer) */
 void B_input(struct pkt packet)
 {
     // check for corruption, check that the sequence is equal to expected seq num
@@ -195,10 +198,19 @@ void B_input(struct pkt packet)
         ack_pkt.acknum = packet.seqnum;
         ack_pkt.checksum = calculate_checksum(ack_pkt);
 
+        last_ack_pkt_sent = ack_pkt;
+
         // send the packet back to layer 3 so that it can be sent back to A
         tolayer3(B, ack_pkt);
 
         bExpectedSequenceNum = (bExpectedSequenceNum + 1) % 2;
+    }
+    else
+    {
+        //  in this case, it means that A did not receive the ACK packet previously sent, because the packet that B received is not the one expected meaning A is waiting for previous ACK
+        // have to resend the last packet we sent
+        printf("Did not receive the expected packet from A, resending previously sent ACK pkt\n");
+        tolayer3(B, last_ack_pkt_sent);
     }
 }
 
